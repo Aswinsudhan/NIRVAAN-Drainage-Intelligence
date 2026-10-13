@@ -1,51 +1,129 @@
 # NIRVAAN Drainage Intelligence
 
-NIRVAAN is a local-first civic operations prototype for reporting, tracking, and prioritizing blocked drainage issues. The application runs entirely in the browser, stores incident records in IndexedDB, and uses demo/local data to simulate city operations without requiring a cloud backend or external paid APIs.
+> A civic operations platform for reporting, prioritizing, mapping, and resolving blocked drainage incidents.
 
-## What the app includes
+NIRVAAN helps residents submit drainage complaints with photo and location evidence while giving operations teams a shared view of incident status, severity, risk, and resolution progress.
 
-- Complaint reporting form with photo upload, location metadata, and issue details
-- Local complaint tracking by complaint ID
-- Incident management list with status and severity summaries
-- Map-oriented overview for hotspot review and location clustering
-- Detection laboratory with simulated drain-risk conditions
-- Analytics summaries for backlog, severity trends, and repeated hotspots
-- Browser-local data persistence and demo seeding for prototype environments
+## Overview
 
-## Tech stack
+NIRVAAN combines a Vite-powered React frontend with an Express API and PostgreSQL persistence:
 
-- React + TypeScript + Vite
+```text
+Resident or operator
+        │
+        ▼
+Vercel frontend ────── HTTPS ──────► Render API
+                                      │
+                                      ▼
+                               PostgreSQL database
+```
+
+The application is designed for local development and straightforward deployment to Vercel and Render.
+
+## Features
+
+- **Complaint reporting** — Submit a blocked-drain report with photo evidence, location, severity, and description.
+- **Complaint tracking** — Find a submitted report by its complaint ID.
+- **Incident management** — Review active cases, statuses, priorities, and operational notes.
+- **Interactive map** — Plot incident locations using React Leaflet and OpenStreetMap tiles.
+- **Risk detection laboratory** — Explore simulated rainfall, blockage, slope, population, and asset-condition scenarios.
+- **Analytics dashboard** — Review severity distribution, status summaries, recurring locations, and priority trends.
+- **Shared persistence** — Store incidents in PostgreSQL through the backend API instead of browser-only storage.
+- **JWT authentication** — Protect operator actions such as incident updates and data deletion.
+- **Responsive interface** — Works across desktop and mobile layouts.
+
+## Technology
+
+### Frontend
+
+- React
+- TypeScript
+- Vite
 - Tailwind CSS
 - React Router
-- Leaflet / React Leaflet
+- React Leaflet and Leaflet
 - Recharts
-- IndexedDB via idb
-- Vitest + Testing Library
+- Vitest and Testing Library
+
+### Backend
+
+- Node.js
+- Express
+- PostgreSQL
+- `pg`
+- JWT
+- `bcryptjs`
+- CORS
+
+### Hosting
+
+- Vercel for the frontend
+- Render Web Service for the API
+- Render PostgreSQL for shared data
+
+## Project structure
+
+```text
+.
+├── backend/
+│   └── src/
+│       ├── auth.js          # JWT and password helpers
+│       ├── db.js            # PostgreSQL connection pool
+│       └── server.js        # Express API
+├── db/
+│   └── schema.sql           # PostgreSQL schema
+├── public/                  # Static public assets
+├── src/
+│   ├── data/                # Demo incident data
+│   ├── lib/                 # Shared frontend utilities
+│   ├── services/            # API client and analytics services
+│   ├── App.tsx              # Routes and application screens
+│   └── main.tsx             # Frontend entry point
+├── render.yaml              # Render service configuration
+├── vercel.json              # SPA route rewrites for Vercel
+└── vite.config.ts           # Vite development configuration
+```
 
 ## Local development
 
-Prerequisites:
+### Prerequisites
 
 - Node.js 18 or newer
 - npm
+- PostgreSQL 14 or newer
 
-Install dependencies:
+### 1. Install frontend dependencies
 
 ```bash
 npm install
 ```
 
-Run the app in development mode:
+### 2. Configure PostgreSQL
+
+Create a local database, then apply the schema:
 
 ```bash
-npm run dev
+createdb nirvaan
+psql postgresql://postgres:postgres@localhost:5432/nirvaan -f db/schema.sql
 ```
 
-The development server is configured to run at `http://localhost:5180/`.
+Copy the backend environment template:
 
-The frontend now expects the API at `http://localhost:4000/api`. Start PostgreSQL, apply
-`db/schema.sql`, copy `backend/.env.example` to `backend/.env`, and start the API in a
-second terminal:
+```bash
+copy backend\.env.example backend\.env
+```
+
+Update `backend/.env` with your database credentials and a secure JWT secret:
+
+```env
+PORT=4000
+NODE_ENV=development
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nirvaan
+JWT_SECRET=replace-with-a-long-random-secret
+CORS_ORIGINS=http://localhost:5180
+```
+
+### 3. Start the API
 
 ```bash
 cd backend
@@ -53,36 +131,115 @@ npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env` in the project root if the API uses a different URL.
+The API is available at `http://localhost:4000`.
 
-Build the production bundle:
+Check its health:
 
-```bash
-npm run build
+```text
+http://localhost:4000/health
 ```
 
-Run the test suite:
+### 4. Configure and start the frontend
 
-```bash
-npm test -- --run
+From the project root, copy `.env.example` to `.env` if the API is not using its default URL:
+
+```env
+VITE_API_BASE_URL=http://localhost:4000/api
 ```
 
-## Notes
+Start the frontend:
 
-- This project is intentionally a local demo and uses sample civic data.
-- Public complaint tracking avoids exposing private contact details.
-- Incident records are stored in PostgreSQL through the Express API. Browser IndexedDB is no longer the source of truth.
+```bash
+npm run dev
+```
 
-## Vercel and Render deployment
+The Vite server runs at:
 
-1. Create a PostgreSQL database on Render and run `db/schema.sql` against it.
-2. Deploy the `backend` directory as a Render Web Service using `npm install` and `npm start`.
-3. Set `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, and `CORS_ORIGINS` on Render.
-4. Deploy the repository as a Vercel Vite project.
-5. Set `VITE_API_BASE_URL` in Vercel to the Render API URL ending in `/api`.
-6. `vercel.json` rewrites client-side routes such as `/map` and `/incidents` to the SPA entry point.
+```text
+http://localhost:5180
+```
 
-The API exposes `/health`, JWT registration/login endpoints, public incident submission and
-tracking, and authenticated incident updates/deletion. Use a long random `JWT_SECRET` and
-restrict `CORS_ORIGINS` to the actual Vercel domain in production.
-"# NIRVAAN-Drainage-Intelligence" 
+On Windows, you can also double-click [`run.bat`](./run.bat). It detects an existing server and selects an available port when necessary.
+
+## Commands
+
+Run these commands from the project root:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Vite development server |
+| `npm run build` | Type-check and build the production frontend |
+| `npm run lint` | Run Oxlint |
+| `npm test -- --run` | Run the frontend test suite |
+
+Run these commands from `backend/`:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the API with Node watch mode |
+| `npm start` | Start the API in production mode |
+
+## API endpoints
+
+| Method | Endpoint | Authentication | Description |
+| --- | --- | --- | --- |
+| `GET` | `/health` | Public | Check API and database health |
+| `POST` | `/api/auth/register` | Public | Create an operator account |
+| `POST` | `/api/auth/login` | Public | Obtain a JWT |
+| `GET` | `/api/incidents` | Public | List incidents |
+| `GET` | `/api/incidents/:complaintId` | Public | Track a complaint |
+| `POST` | `/api/incidents` | Public | Submit or upsert an incident |
+| `PATCH` | `/api/incidents/:id` | JWT | Update an incident |
+| `DELETE` | `/api/incidents` | JWT | Clear incident records |
+
+## Deploy to Vercel and Render
+
+### Render
+
+1. Create a Render PostgreSQL database.
+2. Run [`db/schema.sql`](./db/schema.sql) against the database.
+3. Create a Render Web Service from the repository.
+4. Set the service root directory to `backend`.
+5. Use `npm install` as the build command.
+6. Use `npm start` as the start command.
+7. Configure these environment variables:
+
+   ```env
+   DATABASE_URL=<Render PostgreSQL connection string>
+   JWT_SECRET=<long random secret>
+   NODE_ENV=production
+   CORS_ORIGINS=https://<your-vercel-domain>
+   ```
+
+The included [`render.yaml`](./render.yaml) provides the service configuration.
+
+### Vercel
+
+1. Import the repository into Vercel.
+2. Use the default Vite build settings.
+3. Set the environment variable:
+
+   ```env
+   VITE_API_BASE_URL=https://<your-render-service>.onrender.com/api
+   ```
+
+4. Deploy the project.
+
+The included [`vercel.json`](./vercel.json) rewrites client-side routes such as `/map`, `/track`, and `/incidents` to the SPA entry point.
+
+## Data and security notes
+
+- Never commit `.env` files or production secrets.
+- Use a long, randomly generated `JWT_SECRET` in production.
+- Restrict `CORS_ORIGINS` to the deployed frontend domain.
+- Photo data is currently carried in the incident payload. Production deployments should move large image files to object storage and store only their URLs in PostgreSQL.
+- Public complaint lookup should be extended with rate limiting and privacy controls before handling real citizen data.
+- Render free services may sleep when inactive, which can make the first request slower.
+
+## Current scope
+
+NIRVAAN is a working civic operations prototype. The core frontend, API, PostgreSQL schema, authentication helpers, interactive map, and Vercel/Render deployment configuration are included. Additional production hardening—role-based permissions, object storage, rate limiting, audit logs, and automated deployment checks—can be added as the platform moves beyond demonstration use.
+
+## License
+
+This project is currently maintained as an application prototype. Add the project's chosen license before distributing it publicly.
