@@ -16,6 +16,10 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '10mb' }))
 
+app.get('/', (_req, res) => {
+  res.json({ name: 'NIRVAAN API', status: 'ok', health: '/health' })
+})
+
 app.get('/health', async (_req, res) => {
   try {
     await query('SELECT 1')
