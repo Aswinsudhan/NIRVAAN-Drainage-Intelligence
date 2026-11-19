@@ -1,245 +1,219 @@
 # NIRVAAN Drainage Intelligence
 
-> A civic operations platform for reporting, prioritizing, mapping, and resolving blocked drainage incidents.
+NIRVAAN is a Vite/React frontend with an Express API. Production storage uses Cloudflare D1; the API is hosted on Render and the frontend is hosted on Vercel.
 
-NIRVAAN helps residents submit drainage complaints with photo and location evidence while giving operations teams a shared view of incident status, severity, risk, and resolution progress.
-
-## Overview
-
-NIRVAAN combines a Vite-powered React frontend with an Express API and PostgreSQL persistence:
+## Architecture
 
 ```text
-Resident or operator
-        │
-        ▼
-Vercel frontend ────── HTTPS ──────► Render API
-                                      │
-                                      ▼
-                               PostgreSQL database
+Vercel React frontend
+        |
+        | HTTPS / CORS
+        v
+Render Express API
+        |
+        | Cloudflare REST API
+        v
+Cloudflare D1 SQLite database
 ```
 
-The application is designed for local development and straightforward deployment to Vercel and Render.
-
-## Features
-
-- **Complaint reporting** — Submit a blocked-drain report with photo evidence, location, severity, and description.
-- **Complaint tracking** — Find a submitted report by its complaint ID.
-- **Incident management** — Review active cases, statuses, priorities, and operational notes.
-- **Interactive map** — Plot incident locations using React Leaflet and OpenStreetMap tiles.
-- **Risk detection laboratory** — Explore simulated rainfall, blockage, slope, population, and asset-condition scenarios.
-- **Analytics dashboard** — Review severity distribution, status summaries, recurring locations, and priority trends.
-- **Shared persistence** — Store incidents in PostgreSQL through the backend API instead of browser-only storage.
-- **JWT authentication** — Protect operator actions such as incident updates and data deletion.
-- **Responsive interface** — Works across desktop and mobile layouts.
-
-## Technology
-
-### Frontend
-
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- React Router
-- React Leaflet and Leaflet
-- Recharts
-- Vitest and Testing Library
-
-### Backend
-
-- Node.js
-- Express
-- PostgreSQL
-- `pg`
-- JWT
-- `bcryptjs`
-- CORS
-
-### Hosting
-
-- Vercel for the frontend
-- Render Web Service for the API
-- Render PostgreSQL for shared data
-
-## Project structure
-
-```text
-.
-├── backend/
-│   └── src/
-│       ├── auth.js          # JWT and password helpers
-│       ├── db.js            # PostgreSQL connection pool
-│       └── server.js        # Express API
-├── db/
-│   └── schema.sql           # PostgreSQL schema
-├── public/                  # Static public assets
-├── src/
-│   ├── data/                # Demo incident data
-│   ├── lib/                 # Shared frontend utilities
-│   ├── services/            # API client and analytics services
-│   ├── App.tsx              # Routes and application screens
-│   └── main.tsx             # Frontend entry point
-├── render.yaml              # Render service configuration
-├── vercel.json              # SPA route rewrites for Vercel
-└── vite.config.ts           # Vite development configuration
-```
-
-## Local development
-
-### Prerequisites
+## Prerequisites
 
 - Node.js 18 or newer
 - npm
-- PostgreSQL 14 or newer
+- A Cloudflare account
+- A Render account
+- A Vercel account
 
-### 1. Install frontend dependencies
+## 1. Create the Cloudflare D1 database
 
-```bash
-npm install
-```
+From the Cloudflare dashboard:
 
-### 2. Configure PostgreSQL
+1. Open **Workers & Pages**.
+2. Open **D1**.
+3. Create a database, for example `nirvaan-prod`.
+4. Open the database and select **Console**.
+5. Run the complete contents of [`db/schema.sql`](./db/schema.sql).
 
-Create a local database, then apply the schema:
+Record these values:
 
-```bash
-createdb nirvaan
-psql postgresql://postgres:postgres@localhost:5432/nirvaan -f db/schema.sql
-```
+- Cloudflare Account ID: visible in the account dashboard URL or account overview
+- D1 Database ID: visible on the D1 database details page
 
-Copy the backend environment template:
+## 2. Create a Cloudflare API token
 
-```bash
-copy backend\.env.example backend\.env
-```
+In **Cloudflare Dashboard -> Profile -> API Tokens**, create a custom token with:
 
-Update `backend/.env` with your database credentials and a secure JWT secret:
+- `Account` -> `D1` -> `Edit`
+- `Account Resources`: include the account containing the D1 database
 
-```env
-PORT=4000
-NODE_ENV=development
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nirvaan
-JWT_SECRET=replace-with-a-long-random-secret
-CORS_ORIGINS=http://localhost:5180
-```
+Create the token and store it securely. It should only be used as `CLOUDFLARE_API_TOKEN` on Render and never in Vite/frontend variables.
 
-### 3. Start the API
+## 3. Configure the backend locally
 
 ```bash
 cd backend
 npm install
+copy .env.example .env
 npm run dev
 ```
 
-The API is available at `http://localhost:4000`.
+Set [`backend/.env.example`](./backend/.env.example) values in `backend/.env`:
 
-Check its health:
+```env
+PORT=4000
+NODE_ENV=development
+CLOUDFLARE_ACCOUNT_ID=your-account-id
+CLOUDFLARE_D1_DATABASE_ID=your-d1-database-id
+CLOUDFLARE_API_TOKEN=your-d1-api-token
+JWT_SECRET=replace-with-a-long-random-secret
+CORS_ORIGINS=http://localhost:5180
+```
+
+Generate a JWT secret with PowerShell:
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+```
+
+Health check:
 
 ```text
 http://localhost:4000/health
 ```
 
-### 4. Configure and start the frontend
+## 4. Deploy the backend to Render
 
-From the project root, copy `.env.example` to `.env` if the API is not using its default URL:
+Push the repository to GitHub, then create a Render **Web Service**:
+
+| Setting | Value |
+|---|---|
+| Repository | Your NIRVAAN repository |
+| Root Directory | `backend` |
+| Runtime | Node |
+| Build Command | `npm install` |
+| Start Command | `npm start` |
+| Health Check Path | `/health` |
+
+Alternatively, use the included [`render.yaml`](./render.yaml) with Render Blueprint deployment.
+
+Configure these environment variables on Render:
 
 ```env
-VITE_API_BASE_URL=http://localhost:4000/api
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare Account ID>
+CLOUDFLARE_D1_DATABASE_ID=<D1 Database ID>
+CLOUDFLARE_API_TOKEN=<Cloudflare API token>
+JWT_SECRET=<long random secret>
+NODE_ENV=production
+CORS_ORIGINS=https://<your-vercel-project>.vercel.app
 ```
 
-Start the frontend:
+After deployment, verify:
+
+```text
+https://<your-render-service>.onrender.com/health
+```
+
+Do not set `CORS_ORIGINS=*`. Add custom domains and preview domains explicitly as comma-separated origins if required.
+
+## 5. Deploy the frontend to Vercel
+
+Import the GitHub repository into Vercel.
+
+| Setting | Value |
+|---|---|
+| Framework Preset | Vite |
+| Root Directory | Repository root |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+| Install Command | `npm install` |
+
+Set this Vercel environment variable for Production and Preview:
+
+```env
+VITE_API_BASE_URL=https://<your-render-service>.onrender.com/api
+```
+
+Redeploy after changing the variable. Vite exposes variables beginning with `VITE_` to browser code, so only public API URLs belong in this variable.
+
+The included [`vercel.json`](./vercel.json) keeps client-side routes such as `/map`, `/track`, and `/incidents` working.
+
+## 6. Final DNS/CORS configuration
+
+Use the deployed Vercel domain in Render's `CORS_ORIGINS`, for example:
+
+```env
+CORS_ORIGINS=https://nirvaan.vercel.app,https://nirvaan.example.com
+```
+
+Redeploy/restart the Render service after changing CORS or Cloudflare values.
+
+## Local frontend development
+
+From the repository root:
 
 ```bash
+copy .env.example .env
+npm install
 npm run dev
 ```
 
-The Vite server runs at:
-
-```text
-http://localhost:5180
-```
-
-On Windows, you can also double-click [`run.bat`](./run.bat). It detects an existing server and selects an available port when necessary.
+The default frontend URL is `http://localhost:5180`.
 
 ## Commands
 
-Run these commands from the project root:
+Frontend:
 
 | Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the Vite development server |
-| `npm run build` | Type-check and build the production frontend |
+|---|---|
+| `npm run dev` | Start Vite |
+| `npm run build` | Type-check and build |
 | `npm run lint` | Run Oxlint |
-| `npm test -- --run` | Run the frontend test suite |
+| `npm test -- --run` | Run Vitest |
 
-Run these commands from `backend/`:
+Backend:
 
 | Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the API with Node watch mode |
-| `npm start` | Start the API in production mode |
+|---|---|
+| `npm run dev` | Start Express with watch mode |
+| `npm start` | Start Express |
 
 ## API endpoints
 
-| Method | Endpoint | Authentication | Description |
-| --- | --- | --- | --- |
-| `GET` | `/health` | Public | Check API and database health |
-| `POST` | `/api/auth/register` | Public | Create an operator account |
-| `POST` | `/api/auth/login` | Public | Obtain a JWT |
-| `GET` | `/api/incidents` | Public | List incidents |
-| `GET` | `/api/incidents/:complaintId` | Public | Track a complaint |
-| `POST` | `/api/incidents` | Public | Submit or upsert an incident |
-| `PATCH` | `/api/incidents/:id` | JWT | Update an incident |
-| `DELETE` | `/api/incidents` | JWT | Clear incident records |
+| Method | Endpoint | Authentication |
+|---|---|---|
+| `GET` | `/health` | Public |
+| `POST` | `/api/auth/register` | Public |
+| `POST` | `/api/auth/login` | Public |
+| `GET` | `/api/incidents` | Public |
+| `GET` | `/api/incidents/:complaintId` | Public |
+| `POST` | `/api/incidents` | Public |
+| `PATCH` | `/api/incidents/:id` | JWT |
+| `DELETE` | `/api/incidents` | JWT |
 
-## Deploy to Vercel and Render
+## Database maintenance
 
-### Render
+Initialize or update the D1 schema in the Cloudflare D1 Console:
 
-1. Create a Render PostgreSQL database.
-2. Run [`db/schema.sql`](./db/schema.sql) against the database.
-3. Create a Render Web Service from the repository.
-4. Set the service root directory to `backend`.
-5. Use `npm install` as the build command.
-6. Use `npm start` as the start command.
-7. Configure these environment variables:
+```sql
+-- Run db/schema.sql
+```
 
-   ```env
-   DATABASE_URL=<Render PostgreSQL connection string>
-   JWT_SECRET=<long random secret>
-   NODE_ENV=production
-   CORS_ORIGINS=https://<your-vercel-domain>
-   ```
+For the Wrangler CLI, the equivalent steps are:
 
-The included [`render.yaml`](./render.yaml) provides the service configuration.
+```bash
+npx wrangler d1 create nirvaan-prod
+npx wrangler d1 execute nirvaan-prod --file=./db/schema.sql
+npx wrangler d1 execute nirvaan-prod --command="SELECT * FROM incidents"
+```
 
-### Vercel
+Use the database ID produced by `wrangler d1 create` for `CLOUDFLARE_D1_DATABASE_ID`.
 
-1. Import the repository into Vercel.
-2. Use the default Vite build settings.
-3. Set the environment variable:
+## Security notes
 
-   ```env
-   VITE_API_BASE_URL=https://<your-render-service>.onrender.com/api
-   ```
-
-4. Deploy the project.
-
-The included [`vercel.json`](./vercel.json) rewrites client-side routes such as `/map`, `/track`, and `/incidents` to the SPA entry point.
-
-## Data and security notes
-
-- Never commit `.env` files or production secrets.
-- Use a long, randomly generated `JWT_SECRET` in production.
-- Restrict `CORS_ORIGINS` to the deployed frontend domain.
-- Photo data is currently carried in the incident payload. Production deployments should move large image files to object storage and store only their URLs in PostgreSQL.
-- Public complaint lookup should be extended with rate limiting and privacy controls before handling real citizen data.
-- Render free services may sleep when inactive, which can make the first request slower.
-
-## Current scope
-
-NIRVAAN is a working civic operations prototype. The core frontend, API, PostgreSQL schema, authentication helpers, interactive map, and Vercel/Render deployment configuration are included. Additional production hardening—role-based permissions, object storage, rate limiting, audit logs, and automated deployment checks—can be added as the platform moves beyond demonstration use.
-
-## License
-
-This project is currently maintained as an application prototype. Add the project's chosen license before distributing it publicly.
+- Never commit `backend/.env`, API tokens, or JWT secrets.
+- Keep Cloudflare credentials server-side on Render only.
+- Restrict CORS to deployed frontend origins.
+- Use a strong random JWT secret and rotate it if exposed.
+- The API token should have D1 edit access only for the intended account/database.
+- Render free instances may sleep and cause a delayed first request.
+- Incident photos are included in the payload and should be moved to Cloudflare R2 before production use.

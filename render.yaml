@@ -7,7 +7,11 @@ services:
     startCommand: npm start
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_D1_DATABASE_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
         sync: false
       - key: JWT_SECRET
         generateValue: true

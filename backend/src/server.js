@@ -2,7 +2,7 @@ import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
 import { comparePassword, hashPassword, issueToken, requireAuth } from './auth.js'
-import { pool, query } from './db.js'
+import { query } from './db.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 4000)
@@ -33,14 +33,20 @@ app.post('/api/auth/register', async (req, res) => {
 
   try {
     const passwordHash = await hashPassword(password)
-    const result = await query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role',
-      [email.toLowerCase().trim(), passwordHash],
+    await query(
+      'INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)',
+      [crypto.randomUUID(), email.toLowerCase().trim(), passwordHash],
     )
-    const user = result.rows[0]
+    const userResult = await query(
+      'SELECT id, email, role FROM users WHERE email = $1',
+      [email.toLowerCase().trim()],
+    )
+    const user = userResult.rows[0]
     res.status(201).json({ user, token: issueToken(user) })
   } catch (error) {
-    if (error?.code === '23505') return res.status(409).json({ error: 'An account with that email already exists.' })
+    if (String(error?.message ?? '').toLowerCase().includes('unique')) {
+      return res.status(409).json({ error: 'An account with that email already exists.' })
+    }
     res.status(500).json({ error: 'Unable to create account.' })
   }
 })
@@ -59,42 +65,48 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/incidents', async (_req, res) => {
   const result = await query('SELECT payload FROM incidents ORDER BY updated_at DESC')
-  res.json(result.rows.map((row) => row.payload))
+  res.json(result.rows.map((row) => JSON.parse(row.payload)))
 })
 
 app.get('/api/incidents/:complaintId', async (req, res) => {
   const result = await query('SELECT payload FROM incidents WHERE complaint_id = $1', [req.params.complaintId])
   if (!result.rows[0]) return res.status(404).json({ error: 'Complaint not found.' })
-  res.json(result.rows[0].payload)
+  res.json(JSON.parse(result.rows[0].payload))
 })
 
 app.post('/api/incidents', async (req, res) => {
   const incident = req.body
   if (!incident?.id || !incident?.complaintId || !incident?.location) return res.status(400).json({ error: 'Incident id, complaint id, and location are required.' })
-  const result = await query(
+  await query(
     `INSERT INTO incidents (id, complaint_id, location, payload)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, location = EXCLUDED.location, updated_at = NOW()
-     RETURNING payload`,
-    [incident.id, incident.complaintId, incident.location, incident],
+     ON CONFLICT(id) DO UPDATE SET
+       payload = excluded.payload,
+       location = excluded.location,
+       updated_at = datetime('now')`,
+    [incident.id, incident.complaintId, incident.location, JSON.stringify(incident)],
   )
-  res.status(201).json(result.rows[0].payload)
+  res.status(201).json(incident)
 })
 
 app.patch('/api/incidents/:id', requireAuth, async (req, res) => {
-  const result = await query(
-    `UPDATE incidents
-     SET payload = payload || $2::jsonb, updated_at = NOW()
-     WHERE id = $1
-     RETURNING payload`,
-    [req.params.id, JSON.stringify({ ...req.body, updatedAt: new Date().toISOString() })],
-  )
+  const result = await query('SELECT payload FROM incidents WHERE id = $1', [req.params.id])
   if (!result.rows[0]) return res.status(404).json({ error: 'Incident not found.' })
-  res.json(result.rows[0].payload)
+
+  const incident = {
+    ...JSON.parse(result.rows[0].payload),
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+  }
+  await query(
+    'UPDATE incidents SET payload = $2, location = $3, updated_at = datetime(\'now\') WHERE id = $1',
+    [req.params.id, JSON.stringify(incident), incident.location],
+  )
+  res.json(incident)
 })
 
 app.delete('/api/incidents', requireAuth, async (_req, res) => {
-  await query('TRUNCATE TABLE incidents')
+  await query('DELETE FROM incidents')
   res.status(204).end()
 })
 
@@ -106,6 +118,5 @@ app.use((error, _req, res, _next) => {
 app.listen(port, () => console.log(`NIRVAAN API listening on port ${port}`))
 
 process.on('SIGTERM', async () => {
-  await pool.end()
   process.exit(0)
 })
